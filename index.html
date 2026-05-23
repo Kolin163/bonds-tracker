@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BondTracker — Учёт облигаций</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BondTracker">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<div class="app-container">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <img src="icon.png" class="sidebar-logo" alt="B">
+      <div>
+        <div class="sidebar-title">BondTracker</div>
+        <div class="sidebar-subtitle">Учёт облигаций</div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section-label">Главное</div>
+      <div class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span><span>Дашборд</span>
+      </div>
+      <div class="nav-item" data-page="portfolio">
+        <span class="nav-icon">💼</span><span>Портфель</span>
+      </div>
+      <div class="nav-item" data-page="calendar">
+        <span class="nav-icon">📅</span><span>Календарь выплат</span>
+      </div>
+      <div class="nav-item" data-page="floating" id="navFloating" style="display:none">
+        <span class="nav-icon">⚡</span><span>Плавающие купоны</span>
+      </div>
+      <div class="nav-section-label">Аналитика</div>
+      <div class="nav-item" data-page="analytics">
+        <span class="nav-icon">📈</span><span>Доходность</span>
+      </div>
+      <div class="nav-item" data-page="finances">
+        <span class="nav-icon">💰</span><span>Учёт финансов</span>
+      </div>
+      <div class="nav-section-label">Операции</div>
+      <div class="nav-item" data-page="transactions">
+        <span class="nav-icon">📋</span><span>Транзакции</span>
+      </div>
+      <div class="nav-item" data-page="settings">
+        <span class="nav-icon">⚙️</span><span>Настройки</span>
+      </div>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <button class="menu-toggle" id="menuToggle">☰</button>
+        <h1 class="page-title" id="pageTitle">Дашборд</h1>
+      </div>
+      <div class="top-bar-right">
+        <button class="btn btn-primary" id="addBondBtn">+ Добавить</button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <!-- Dashboard -->
+      <section id="page-dashboard" class="active">
+        <div class="summary-grid" id="summaryCards"></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>📈 Вложения</h3></div>
+            <div class="card-body">
+              <div class="chart-container"><canvas id="chartPortfolioValue"></canvas></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3>💰 Купоны по месяцам</h3>
+              <div class="year-selector">
+                <button id="couponYearPrev">‹</button>
+                <span id="couponYearLabel">2025</span>
+                <button id="couponYearNext">›</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="chart-container"><canvas id="chartCouponIncome"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>🏆 Топ по доходности</h3></div>
+            <div class="card-body" id="topYieldList"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>⏳ Ближайшие погашения</h3></div>
+            <div class="card-body" id="upcomingMaturities"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Portfolio -->
+      <section id="page-portfolio">
+        <div class="action-row">
+          <input type="text" class="search-input" id="portfolioSearch" placeholder="🔍 Поиск по названию...">
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <div class="table-wrapper">
+              <table class="data-table" id="portfolioTable">
+                <thead>
+                  <tr>
+                    <th data-sort="name">Облигация ↕</th>
+                    <th data-sort="quantity">Кол-во ↕</th>
+                    <th data-sort="buyPrice">Покупка ↕</th>
+                    <th data-sort="nominalValue">Номинал ↕</th>
+                    <th data-sort="couponSize">Купон ↕</th>
+                    <th data-sort="totalInvested">Вложено ↕</th>
+                    <th data-sort="annualPercent">% годовых ↕</th>
+                    <th data-sort="monthlyIncome">В месяц ↕</th>
+                    <th data-sort="totalIncome">Итого доход ↕</th>
+                    <th data-sort="maturityDate">Погашение ↕</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody id="portfolioBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="empty-state" id="portfolioEmpty" style="display:none">
+          <div class="empty-icon">📭</div>
+          <h3>Портфель пуст</h3>
+          <p>Добавьте первую облигацию, чтобы начать отслеживание</p>
+          <button class="btn btn-primary" onclick="openAddModal()">+ Добавить облигацию</button>
+        </div>
+      </section>
+
+      <!-- Calendar -->
+      <section id="page-calendar">
+        <div class="action-row">
+          <div class="year-selector">
+            <button id="calYearPrev">‹</button>
+            <span id="calYearLabel">2025</span>
+            <button id="calYearNext">›</button>
+          </div>
+          <div class="spacer"></div>
+          <span style="color:var(--text-muted);font-size:13px;">За год: <strong id="calYearTotal" style="color:var(--accent-green)">0 ₽</strong></span>
+        </div>
+        <div class="calendar-grid" id="calendarGrid"></div>
+      </section>
+
+      <!-- Floating coupons -->
+      <section id="page-floating">
+        <div id="floatingList"></div>
+      </section>
+
+      <!-- Analytics -->
+      <section id="page-analytics">
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>📊 Купонный доход по годам</h3></div>
+            <div class="card-body">
+              <div class="chart-container"><canvas id="chartCouponDynamic"></canvas></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>📉 % годовых по облигациям</h3></div>
+            <div class="card-body">
+              <div class="chart-container"><canvas id="chartYield"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>💵 Приток по облигациям (чист. / год)</h3></div>
+          <div class="card-body" id="couponByBond"></div>
+        </div>
+      </section>
+
+      <!-- Finances -->
+      <section id="page-finances">
+        <div class="summary-grid" id="finSummary"></div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header"><h3>📊 Динамика капитала</h3></div>
+          <div class="card-body">
+            <div class="chart-container"><canvas id="chartFinances"></canvas></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>💰 Учёт по месяцам</h3>
+          </div>
+          <div class="card-body" style="padding:0">
+            <div class="table-wrapper">
+              <table class="data-table" id="finTable">
+                <thead>
+                  <tr>
+                    <th>Месяц</th>
+                    <th>Облигации</th>
+                    <th>Вклады</th>
+                    <th>Копилка</th>
+                    <th>Итого</th>
+                    <th>Прибыль</th>
+                    <th>Динамика</th>
+                  </tr>
+                </thead>
+                <tbody id="finBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transactions -->
+      <section id="page-transactions">
+        <div class="action-row">
+          <button class="btn btn-primary" id="addTransactionBtn">+ Добавить операцию</button>
+          <div class="spacer"></div>
+          <select class="currency-selector" id="txFilter">
+            <option value="all">Все типы</option>
+            <option value="buy">Покупка</option>
+            <option value="sell">Продажа</option>
+            <option value="coupon">Купон</option>
+            <option value="maturity">Погашение</option>
+            <option value="amortization">Амортизация</option>
+          </select>
+        </div>
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <div class="table-wrapper">
+              <table class="data-table" id="txTable">
+                <thead>
+                  <tr>
+                    <th>Дата</th><th>Тип</th><th>Облигация</th>
+                    <th>Кол-во</th><th>Цена</th><th>Сумма</th><th></th>
+                  </tr>
+                </thead>
+                <tbody id="txBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="page-settings">
+        <div class="card" style="max-width:700px">
+          <div class="card-header"><h3>⚙️ Настройки</h3></div>
+          <div class="card-body">
+            <div class="settings-section">
+              <h3>Налоги и комиссии</h3>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Ставка налога на купоны (%)</div>
+                  <div class="settings-desc">Для расчёта чистого дохода</div>
+                </div>
+                <input type="number" id="settingsTax" value="13" min="0" max="100" class="settings-input">
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Комиссия брокера (%)</div>
+                  <div class="settings-desc">Процент от суммы сделки</div>
+                </div>
+                <input type="number" id="settingsBrokerFee" value="0.3" min="0" max="100" step="0.01" class="settings-input">
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Учитывать НКД при покупке</div>
+                  <div class="settings-desc">Добавлять НКД к сумме вложений</div>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="settingsNKD" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-section">
+              <h3>Облачная синхронизация</h3>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">URL Google Apps Script</div>
+                  <div class="settings-desc">Вставьте URL вашего Web App деплоя</div>
+                </div>
+                <input type="text" id="settingsSyncUrl" placeholder="https://script.google.com/macros/s/..." style="width:280px;padding:6px 10px;background:var(--bg-input);border:1px solid var(--border-color);color:var(--text-primary);border-radius:var(--radius-sm);font-size:12px;font-family:inherit;">
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Сохранить в облако</div>
+                  <div class="settings-desc">Выгрузить все данные в Google Sheets</div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="cloudSave()" id="cloudSaveBtn">☁️ Сохранить</button>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Загрузить из облака</div>
+                  <div class="settings-desc">Восстановить данные из Google Sheets</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="cloudLoad()" id="cloudLoadBtn">☁️ Загрузить</button>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Локальные данные</h3>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Выгрузить данные</div>
+                  <div class="settings-desc">Скачать все данные в JSON-файл</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="exportData()">📥 Скачать</button>
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Загрузить данные</div>
+                  <div class="settings-desc">Восстановить из JSON-файла</div>
+                </div>
+                <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">📤 Загрузить</button>
+                <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(this)">
+              </div>
+              <div class="settings-row">
+                <div>
+                  <div class="settings-label">Очистить все данные</div>
+                  <div class="settings-desc">Удалить все облигации и транзакции</div>
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="clearAllData()">🗑 Очистить</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Add/Edit Bond Modal -->
+<div class="modal-overlay" id="bondModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="bondModalTitle">Добавить облигацию</h2>
+      <button class="modal-close" onclick="closeModal('bondModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="bondEditId">
+      <div class="form-group">
+        <label>Название *</label>
+        <input type="text" id="bondName" placeholder="ОФЗ 26238">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Номинал (₽)</label>
+          <input type="number" id="bondNominal" value="1000" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Кол-во (шт.)</label>
+          <input type="number" id="bondQuantity" value="1" min="1" step="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Цена покупки (₽ за шт.)</label>
+          <input type="number" id="bondBuyPrice" value="1000" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Купон (₽ за выплату на 1 шт.)</label>
+          <input type="number" id="bondCouponSize" value="35" min="0" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Периодичность купона</label>
+        <select id="bondCouponFreq">
+          <option value="2">2 раза в год</option>
+          <option value="4">4 раза в год</option>
+          <option value="1">1 раз в год</option>
+          <option value="12">Ежемесячно</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Дата покупки</label>
+          <input type="date" id="bondBuyDate">
+        </div>
+        <div class="form-group">
+          <label>Дата погашения</label>
+          <input type="date" id="bondMaturityDate">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>НКД при покупке (₽ всего)</label>
+        <input type="number" id="bondNKD" value="0" min="0" step="0.01">
+      </div>
+      <div style="display:flex;gap:24px;margin-bottom:16px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <span class="toggle">
+            <input type="checkbox" id="bondTaxFree">
+            <span class="toggle-slider"></span>
+          </span>
+          <span style="font-size:13px;color:var(--text-secondary);">Без НДФЛ</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <span class="toggle">
+            <input type="checkbox" id="bondFloating">
+            <span class="toggle-slider"></span>
+          </span>
+          <span style="font-size:13px;color:var(--text-secondary);">Плавающий купон</span>
+        </label>
+      </div>
+
+      <div class="bond-preview" id="bondPreview">
+        <span style="color:var(--text-muted)">Укажите даты покупки и погашения</span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('bondModal')">Отмена</button>
+      <button class="btn btn-primary" id="bondSaveBtn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Transaction Modal -->
+<div class="modal-overlay" id="txModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Добавить операцию</h2>
+      <button class="modal-close" onclick="closeModal('txModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Тип операции</label>
+        <select id="txType">
+          <option value="buy">Покупка</option>
+          <option value="sell">Продажа</option>
+          <option value="coupon">Купон</option>
+          <option value="maturity">Погашение</option>
+          <option value="amortization">Амортизация</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Облигация</label>
+        <select id="txBond"></select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Дата</label>
+          <input type="date" id="txDate">
+        </div>
+        <div class="form-group">
+          <label>Количество</label>
+          <input type="number" id="txQuantity" value="1" min="1">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Цена / Сумма на шт. (₽)</label>
+          <input type="number" id="txPrice" value="0" min="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>Итого (₽)</label>
+          <input type="number" id="txTotal" value="0" step="0.01" readonly style="opacity:0.7">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('txModal')">Отмена</button>
+      <button class="btn btn-primary" id="txSaveBtn">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h2 id="confirmTitle">Подтверждение</h2>
+      <button class="modal-close" onclick="closeModal('confirmModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirmText" style="color:var(--text-secondary)"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('confirmModal')">Отмена</button>
+      <button class="btn btn-danger" id="confirmOkBtn">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
