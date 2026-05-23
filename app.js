@@ -27,35 +27,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-function cloudLoadQuiet() {
-  var url = settings.syncUrl;
-  if (!url) return;
-  cloudGet(url)
-    .then(function(res) {
-      if (res.status === 'ok' && res.data) {
-        var d = res.data;
-        // Проверяем что облачные данные свежее локальных
-        var cloudTime = d.savedAt ? new Date(d.savedAt).getTime() : 0;
-        var localTime = settings.lastSaved ? new Date(settings.lastSaved).getTime() : 0;
-        if (cloudTime > localTime) {
-          if (d.bonds) bonds = d.bonds;
-          if (d.transactions) transactions = d.transactions;
-          if (d.finData) finData = d.finData;
-          if (d.settings) {
-            var syncUrl = settings.syncUrl; // сохраняем URL
-            settings = Object.assign({}, settings, d.settings);
-            settings.syncUrl = syncUrl;
-          }
-          settings.lastSaved = d.savedAt;
-          saveStorageLocal(); // без триггера облачного сохранения
-          loadStorage();
-          renderAll();
-        }
-      }
-    })
-    .catch(function() {});
-}
-
 function saveStorageLocal() {
   try {
     localStorage.setItem('bt_bonds', JSON.stringify(bonds));
@@ -76,26 +47,57 @@ function saveStorage() {
     localStorage.setItem('bt_fin', JSON.stringify(finData));
   } catch(e) { console.error('save error', e); }
 
-  // Автосохранение в облако с задержкой 3 сек (debounce)
+  // Автосохранение в облако с задержкой 5 сек (debounce)
   if (settings.syncUrl) {
     if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
-    cloudSaveTimer = setTimeout(function() { cloudSaveQuiet(); }, 3000);
+    cloudSaveTimer = setTimeout(function() { cloudSaveQuiet(); }, 5000);
   }
 }
 
-function cloudPost(url, payload) {
-  // Google Apps Script redirect после POST — используем no-cors
-  return fetch(url, {
-    method: 'POST',
-    mode: 'no-cors',
-    body: JSON.stringify(payload)
-  });
-}
+// === Cloud Sync ===
+// Google Apps Script Web App делает redirect 302.
+// fetch с redirect:'follow' для GET работает.
+// Для POST redirect ломает тело — поэтому шлём через скрытый form/iframe.
 
 function cloudGet(url) {
-  // Google Apps Script redirect при GET — fetch следует автоматически
   return fetch(url, { redirect: 'follow' })
-    .then(function(r) { return r.json(); });
+    .then(function(r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+}
+
+function cloudPostViaForm(url, payload) {
+  return new Promise(function(resolve, reject) {
+    // Создаём скрытый iframe + form для отправки POST
+    var id = 'cf_' + Date.now();
+    var iframe = document.createElement('iframe');
+    iframe.name = id;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = url;
+    form.target = id;
+    form.style.display = 'none';
+
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = JSON.stringify(payload);
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+    form.submit();
+
+    // Не можем прочитать ответ из-за CORS, но данные дойдут
+    setTimeout(function() {
+      try { document.body.removeChild(iframe); } catch(e) {}
+      try { document.body.removeChild(form); } catch(e) {}
+      resolve();
+    }, 3000);
+  });
 }
 
 function cloudSaveQuiet() {
@@ -114,7 +116,34 @@ function cloudSaveQuiet() {
       savedAt: now
     }
   };
-  cloudPost(url, payload).catch(function() {});
+  cloudPostViaForm(url, payload).catch(function() {});
+}
+
+function cloudLoadQuiet() {
+  var url = settings.syncUrl;
+  if (!url) return;
+  cloudGet(url)
+    .then(function(res) {
+      if (res.status === 'ok' && res.data) {
+        var d = res.data;
+        var cloudTime = d.savedAt ? new Date(d.savedAt).getTime() : 0;
+        var localTime = settings.lastSaved ? new Date(settings.lastSaved).getTime() : 0;
+        if (cloudTime > localTime) {
+          var syncUrl = settings.syncUrl;
+          if (d.bonds) bonds = d.bonds;
+          if (d.transactions) transactions = d.transactions;
+          if (d.finData) finData = d.finData;
+          if (d.settings) settings = Object.assign({}, settings, d.settings);
+          settings.syncUrl = syncUrl;
+          settings.lastSaved = d.savedAt;
+          saveStorageLocal();
+          loadStorage();
+          renderAll();
+          showToast('Данные синхронизированы', 'success');
+        }
+      }
+    })
+    .catch(function() {});
 }
 
 function loadStorage() {
@@ -1320,16 +1349,16 @@ function cloudSave() {
     }
   };
 
-  cloudPost(url, payload)
+  cloudPostViaForm(url, payload)
   .then(function() {
     btn.textContent = '☁️ Сохранить';
     btn.disabled = false;
-    showToast('Данные сохранены в облако', 'success');
+    showToast('Данные отправлены в облако', 'success');
   })
   .catch(function(err) {
     btn.textContent = '☁️ Сохранить';
     btn.disabled = false;
-    showToast('Ошибка сети: ' + err.message, 'error');
+    showToast('Ошибка: ' + err.message, 'error');
   });
 }
 
